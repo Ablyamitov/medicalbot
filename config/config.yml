@@ -1,7 +1,0 @@
-db:
-  host: rc1b-7ps4ku7ckdj1aal1.mdb.yandexcloud.net
-  port: 6432
-  name: wpc-dev
-  user: wpc-admin-dev
-  pass: c060cnB9TKuB
-  ssl_mode: false
