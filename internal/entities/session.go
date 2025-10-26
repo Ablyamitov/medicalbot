@@ -9,6 +9,7 @@ type Session struct {
 	CurrentStep int       `json:"current_step"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	Answers     []Answer  `json:"answers"`
 	TestType    TestType  `json:"test_type"`
 }

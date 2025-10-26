@@ -94,3 +94,78 @@ func (r *SessionRepository) AddAnswer(sessionID string, answer entities.Answer) 
 	}
 	return nil
 }
+
+func (r *SessionRepository) GetStaleSessions(since time.Duration) ([]entities.Session, error) {
+	var sessions []entities.Session
+	cutoff := time.Now().Add(-since)
+
+	if err := r.db.
+		Where("status IN ?", []string{"started", "in_progress"}).
+		Where("updated_at < ?", cutoff).
+		Find(&sessions).Error; err != nil {
+		return nil, fmt.Errorf("failed to get stale sessions: %w", err)
+	}
+
+	return sessions, nil
+}
+
+func (r *SessionRepository) GetActiveSessionByPatientAndType(patientID string, testType entities.TestType) (*entities.Session, error) {
+	var session entities.Session
+	err := r.db.
+		Where("patient_id = ? AND test_type = ? AND status = ?", patientID, testType, "started").
+		Order("created_at DESC").
+		First(&session).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &session, nil
+}
+
+func (r *SessionRepository) GetPatientsWithUnfinishedTests() ([]string, error) {
+	var patientIDs []string
+	err := r.db.
+		Model(&entities.Session{}).
+		Where("status IN ?", []string{"started", "in_progress"}).
+		Distinct().
+		Pluck("patient_id", &patientIDs).Error
+	return patientIDs, err
+}
+
+func (r *SessionRepository) GetUnfinishedSessions(patientID string) ([]*entities.Session, error) {
+	var sessions []*entities.Session
+	err := r.db.
+		Where("patient_id = ? AND status IN ?", patientID, []string{"started", "in_progress"}).
+		Order("created_at DESC").
+		Find(&sessions).Error
+	return sessions, err
+}
+
+func (r *SessionRepository) HasRecentlyCompletedTest(patientID string, since time.Duration) (bool, error) {
+	var count int64
+	err := r.db.
+		Model(&entities.Session{}).
+		Where("patient_id = ? AND status = ? AND updated_at > ?", patientID, "completed", time.Now().Add(-since)).
+		Count(&count).Error
+	return count > 0, err
+}
+
+func (r *SessionRepository) IsLastTestCompleted(patientID string) (bool, error) {
+	var lastSession entities.Session
+	err := r.db.
+		Where("patient_id = ?", patientID).
+		Order("created_at DESC").
+		First(&lastSession).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return lastSession.Status == "completed", nil
+}

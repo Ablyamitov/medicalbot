@@ -2,9 +2,13 @@ package usecase
 
 import (
 	"fmt"
+	"log"
+	"strconv"
+	"time"
 
 	"github.com/Ablyamitov/mamedicalbot/internal/entities"
 	"github.com/Ablyamitov/mamedicalbot/internal/repositories"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 type MedicalBotUseCase struct {
@@ -25,20 +29,31 @@ func (uc *MedicalBotUseCase) GetAvailableTests() ([]entities.Test, error) {
 }
 
 func (uc *MedicalBotUseCase) StartTest(patientID string, testType entities.TestType) (*entities.Session, *entities.Test, error) {
+	// 1️⃣ Получаем сам тест (вопросы и т.д.)
 	test, err := uc.TestRepo.GetTest(testType)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	// Создаем новую сессию (старая перезапишется)
-	session, err := uc.SessionRepo.CreateSession(patientID, testType)
+	// 2️⃣ Проверяем, есть ли уже активная сессия по этому типу
+	existingSession, err := uc.SessionRepo.GetActiveSessionByPatientAndType(patientID, testType)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return session, test, nil
-}
+	// 3️⃣ Если активная сессия есть — продолжаем её
+	if existingSession != nil {
+		return existingSession, test, nil
+	}
 
+	// 4️⃣ Иначе создаем новую
+	newSession, err := uc.SessionRepo.CreateSession(patientID, testType)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return newSession, test, nil
+}
 func (uc *MedicalBotUseCase) GetCurrentQuestion(patientID string) (*entities.Question, error) {
 	session, err := uc.SessionRepo.GetSessionByPatient(patientID)
 	if err != nil {
@@ -147,6 +162,82 @@ func (uc *MedicalBotUseCase) CompleteTest(userID string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func (uc *MedicalBotUseCase) SendRemindersForIncompleteTests(bot *tgbotapi.BotAPI) error {
+	// 1️⃣ Получаем всех пациентов, у кого есть незавершённые тесты
+	patients, err := uc.SessionRepo.GetPatientsWithUnfinishedTests()
+	if err != nil {
+		return fmt.Errorf("get patients: %w", err)
+	}
+
+	for _, patientID := range patients {
+		// 2️⃣ Проверяем, является ли последний тест пользователя завершенным
+		lastTestCompleted, err := uc.SessionRepo.IsLastTestCompleted(patientID)
+		if err != nil {
+			continue
+		}
+		if lastTestCompleted {
+			// последний тест завершен — не напоминаем
+			continue
+		}
+
+		// 3️⃣ Берём его незавершённые сессии, отсортированные по времени (последняя — первая)
+		sessions, err := uc.SessionRepo.GetUnfinishedSessions(patientID)
+		if err != nil || len(sessions) == 0 {
+			continue
+		}
+
+		// 4️⃣ Берём только последнюю активную сессию
+		lastSession := sessions[0]
+
+		timeSince := time.Since(lastSession.UpdatedAt)
+		fmt.Printf("Raw time since: %v\n", timeSince)
+
+		if timeSince < 12*time.Hour {
+			continue
+		}
+
+		test, err := uc.TestRepo.GetTest(lastSession.TestType)
+		if err != nil {
+			continue
+		}
+
+		msg := fmt.Sprintf(
+			"⏰ Привет! Вы начали тест *%s*, но не закончили его.\n\n"+
+				"Продолжим прямо сейчас?",
+			test.Name,
+		)
+
+		keyboard := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData(
+					"✅ Продолжить тест",
+					"start_test_"+string(lastSession.TestType),
+				),
+			),
+		)
+
+		chatID, err := strconv.ParseInt(lastSession.PatientID, 10, 64)
+		if err != nil {
+			continue
+		}
+
+		msgObj := tgbotapi.NewMessage(chatID, msg)
+		msgObj.ParseMode = "Markdown"
+		msgObj.ReplyMarkup = keyboard
+
+		if _, err := bot.Send(msgObj); err != nil {
+			log.Printf("failed to send reminder to %s: %v", lastSession.PatientID, err)
+			continue
+		}
+
+		// 5️⃣ Обновляем UpdatedAt, чтобы не слать часто
+		lastSession.UpdatedAt = time.Now()
+		_ = uc.SessionRepo.UpdateSession(lastSession)
+	}
+
+	return nil
 }
 
 func (uc *MedicalBotUseCase) calculateScore(answers []entities.Answer) int {

@@ -298,6 +298,7 @@ func (h *TelegramBotHandler) showTestResult(chatID int64, userID string) {
 
 func (h *TelegramBotHandler) sendMessage(chatID int64, text string) {
 	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
 	h.bot.Send(msg)
 }
 
