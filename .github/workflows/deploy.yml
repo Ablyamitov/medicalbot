@@ -9,28 +9,46 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-      
-    - name: Setup Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.21'
-        
-    - name: Build application
-      run: |
-        go mod tidy
-        go build -o medicalbot cmd/main.go
-        
-    - name: Deploy to VM
-      uses: appleboy/ssh-action@v0.1.7
-      with:
-        host: ${{ secrets.VM_HOST }}
-        username: ${{ secrets.VM_USERNAME }}
-        key: ${{ secrets.VM_SSH_KEY }}
-        script: |
-          cd /home/backend/medicalbot
-          git pull origin stage
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.21'
+
+      - name: Build application
+        run: |
           go mod tidy
           go build -o medicalbot cmd/main.go
-          sudo systemctl restart medicalbot.service
+
+      - name: Deploy to VM
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            echo "🚀 Starting deployment..."
+            cd /home/medicalbot/backend/medicalbot  # ✅ ИСПРАВЛЕННЫЙ ПУТЬ
+            
+            # Останавливаем сервис
+            sudo systemctl stop medicalbot.service || true
+            
+            # Pull изменений (ВКЛЮЧАЯ migrations папку)
+            git pull origin stage
+            
+            # Проверяем что migrations скопировались
+            echo "📁 Checking migrations folder..."
+            ls -la migrations/
+            
+            # Устанавливаем зависимости
+            go mod tidy
+            
+            # Собираем приложение
+            go build -o medicalbot cmd/main.go
+            
+            # Запускаем сервис
+            sudo systemctl start medicalbot.service
+            
+            echo "✅ Deployment completed!"
