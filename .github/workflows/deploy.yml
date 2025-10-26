@@ -30,16 +30,18 @@ jobs:
           key: ${{ secrets.VM_SSH_KEY }}
           script: |
             echo "🚀 Starting deployment..."
-            cd /home/medicalbot/backend/medicalbot  # ✅ ИСПРАВЛЕННЫЙ ПУТЬ
+            cd /home/medicalbot/backend/medicalbot
             
             # Останавливаем сервис
             sudo systemctl stop medicalbot.service || true
             
-            # Pull изменений (ВКЛЮЧАЯ migrations папку)
-            git pull origin stage
+            # Принудительно обновляем код (ИСПРАВЛЕНИЕ!)
+            git fetch origin
+            git reset --hard origin/stage
             
-            # Проверяем что migrations скопировались
-            echo "📁 Checking migrations folder..."
+            # Проверяем что ВСЕ миграции скопировались
+            echo "📁 Checking ALL migrations files..."
+            ls -la migrations/ | wc -l
             ls -la migrations/
             
             # Устанавливаем зависимости
