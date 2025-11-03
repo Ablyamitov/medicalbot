@@ -7,6 +7,7 @@ import (
 
 	"github.com/Ablyamitov/mamedicalbot/internal/entities"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -21,7 +22,7 @@ func NewSessionRepository(db *gorm.DB) *SessionRepository {
 }
 
 // CreateSession — создаёт новую сессию
-func (r *SessionRepository) CreateSession(patientID string, testType entities.TestType) (*entities.Session, error) {
+func (r *SessionRepository) CreateSession(userID string, testType entities.TestType) (*entities.Session, error) {
 	// сначала найдём тест по типу
 	var test entities.Test
 	if err := r.db.Where("type = ?", testType).First(&test).Error; err != nil {
@@ -30,7 +31,7 @@ func (r *SessionRepository) CreateSession(patientID string, testType entities.Te
 
 	session := &entities.Session{
 		ID:          uuid.New().String(),
-		PatientID:   patientID,
+		UserID:      userID,
 		TestID:      test.ID,
 		CurrentStep: 1,
 		Status:      "started",
@@ -59,17 +60,17 @@ func (r *SessionRepository) GetSession(sessionID string) (*entities.Session, err
 	return &session, nil
 }
 
-// GetSessionByPatient — найти активную сессию пациента
-func (r *SessionRepository) GetSessionByPatient(patientID string) (*entities.Session, error) {
+// GetSessionByUser — найти активную сессию пользователя
+func (r *SessionRepository) GetSessionByUser(userID string) (*entities.Session, error) {
 	var session entities.Session
 	if err := r.db.
 		//Where("patient_id = ? AND status IN (?)", patientID, []string{"started", "in_progress"}).
-		Where("patient_id = ?", patientID).
+		Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Preload("Answers").
 		First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, fmt.Errorf("no session found for patient %s", patientID)
+			return nil, fmt.Errorf("no session found for user %s", userID)
 		}
 		return nil, err
 	}
@@ -109,10 +110,10 @@ func (r *SessionRepository) GetStaleSessions(since time.Duration) ([]entities.Se
 	return sessions, nil
 }
 
-func (r *SessionRepository) GetActiveSessionByPatientAndType(patientID string, testType entities.TestType) (*entities.Session, error) {
+func (r *SessionRepository) GetActiveSessionByUserAndType(userID string, testType entities.TestType, status string) (*entities.Session, error) {
 	var session entities.Session
 	err := r.db.
-		Where("patient_id = ? AND test_type = ? AND status = ?", patientID, testType, "started").
+		Where("user_id = ? AND test_type = ? AND status = ?", userID, testType, status).
 		Order("created_at DESC").
 		First(&session).Error
 
@@ -125,20 +126,20 @@ func (r *SessionRepository) GetActiveSessionByPatientAndType(patientID string, t
 	return &session, nil
 }
 
-func (r *SessionRepository) GetPatientsWithUnfinishedTests() ([]string, error) {
+func (r *SessionRepository) GetUsersWithUnfinishedTests() ([]string, error) {
 	var patientIDs []string
 	err := r.db.
 		Model(&entities.Session{}).
 		Where("status IN ?", []string{"started", "in_progress"}).
 		Distinct().
-		Pluck("patient_id", &patientIDs).Error
+		Pluck("user_id", &patientIDs).Error
 	return patientIDs, err
 }
 
-func (r *SessionRepository) GetUnfinishedSessions(patientID string) ([]*entities.Session, error) {
+func (r *SessionRepository) GetUnfinishedSessions(userID string) ([]*entities.Session, error) {
 	var sessions []*entities.Session
 	err := r.db.
-		Where("patient_id = ? AND status IN ?", patientID, []string{"started", "in_progress"}).
+		Where("user_id = ? AND status IN ?", userID, []string{"started", "in_progress"}).
 		Order("created_at DESC").
 		Find(&sessions).Error
 	return sessions, err
@@ -153,10 +154,10 @@ func (r *SessionRepository) HasRecentlyCompletedTest(patientID string, since tim
 	return count > 0, err
 }
 
-func (r *SessionRepository) IsLastTestCompleted(patientID string) (bool, error) {
+func (r *SessionRepository) IsLastTestCompleted(userID string) (bool, error) {
 	var lastSession entities.Session
 	err := r.db.
-		Where("patient_id = ?", patientID).
+		Where("user_id = ?", userID).
 		Order("created_at DESC").
 		First(&lastSession).Error
 
@@ -168,4 +169,49 @@ func (r *SessionRepository) IsLastTestCompleted(patientID string) (bool, error) 
 	}
 
 	return lastSession.Status == "completed", nil
+}
+
+func (r *SessionRepository) GetStatistics() ([]entities.SessionStatistic, error) {
+	const query = `
+SELECT
+    s.id AS session_id,
+    u.chat_id,
+    u.first_name,
+    u.last_name,
+    u.username,
+    s.test_type,
+    s.status,
+    s.created_at,
+    s.updated_at,
+    COUNT(a.id) AS answered_questions,
+    tr.score,
+    tr.interpretation,
+    tr.recommendations
+FROM sessions s
+LEFT JOIN users u ON u.id = s.user_id
+LEFT JOIN answers a ON a.session_id = s.id
+LEFT JOIN test_results tr ON tr.session_id = s.id
+GROUP BY s.id, u.id, u.chat_id, u.first_name, u.last_name, u.username, tr.score, tr.interpretation, tr.recommendations
+ORDER BY s.created_at DESC;
+
+`
+
+	var stats []entities.SessionStatistic
+	if err := r.db.Raw(query).Scan(&stats).Error; err != nil {
+		return nil, fmt.Errorf("failed to get statistics: %w", err)
+	}
+
+	return stats, nil
+}
+func (r *SessionRepository) SaveTestResult(session *entities.Session, score int, interpretation string, recommendations []string) error {
+	const query = `
+    INSERT INTO test_results(session_id, score, interpretation, recommendations)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT ON CONSTRAINT test_results_session_id_unique DO UPDATE
+    SET score = EXCLUDED.score,
+        interpretation = EXCLUDED.interpretation,
+        recommendations = EXCLUDED.recommendations,
+        created_at = now();
+    `
+	return r.db.Exec(query, session.ID, score, interpretation, pq.Array(recommendations)).Error
 }

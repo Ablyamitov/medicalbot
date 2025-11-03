@@ -1,0 +1,6 @@
+ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE CASCADE;
+
+
+ALTER TABLE sessions
+    DROP COLUMN IF EXISTS patient_id;

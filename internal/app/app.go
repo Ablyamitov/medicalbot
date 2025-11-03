@@ -94,8 +94,9 @@ func Run(cfg *config.Config) error {
 	testRepo := gorm.NewTestRepository(gormConn)
 	sessionRepo := gorm.NewSessionRepository(gormConn)
 	questionRepo := gorm.NewQuestionRepository(gormConn)
+	userRepo := gorm.NewUserRepository(gormConn)
 
-	useCase := usecase.NewMedicalBotUseCase(testRepo, sessionRepo, questionRepo)
+	useCase := usecase.NewMedicalBotUseCase(testRepo, sessionRepo, questionRepo, userRepo)
 	handl := handler.NewTelegramBotHandler(bot, useCase)
 
 	// Инициализация планировщика cron

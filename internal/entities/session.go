@@ -4,7 +4,7 @@ import "time"
 
 type Session struct {
 	ID          string    `json:"id"`
-	PatientID   string    `json:"patient_id"`
+	UserID      string    `json:"user_id"`
 	TestID      int64     `json:"test_id"`
 	CurrentStep int       `json:"current_step"`
 	Status      string    `json:"status"`
