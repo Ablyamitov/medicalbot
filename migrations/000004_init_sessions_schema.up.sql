@@ -5,5 +5,6 @@ CREATE TABLE IF NOT EXISTS sessions (
                                         current_step int not null default 1,
                                         status      varchar(50) not null default 'started',
                                         test_type   varchar(50),
-                                        created_at  timestamp not null default now()
+                                        created_at  timestamp not null default now(),
+                                        updated_at timestamp not null default now()
 );
