@@ -22,36 +22,62 @@ jobs:
           go mod tidy
           go build -o medicalbot cmd/main.go
 
-      - name: Test SSH connection
+      - name: Setup SSH key properly
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          # Убедимся что ключ сохраняется правильно
+          cat << 'EOF' > ~/.ssh/deploy_key
+          ${{ secrets.VM_SSH_KEY }}
+          EOF
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
           
-          # Тест подключения
+          # Проверим формат ключа
+          echo "🔍 Checking key format..."
+          file ~/.ssh/deploy_key
+          head -2 ~/.ssh/deploy_key
+          
+          # Добавим хост в known_hosts
+          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Test SSH connection
+        run: |
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
               -o ConnectTimeout=10 \
+              -o BatchMode=yes \
               ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} \
-              "echo '✅ SSH Connection successful'"
+              "echo '✅ SSH connection successful'"
 
-      - name: Deploy via Git Pull
+      - name: Deploy application
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
-              ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} \
-              "cd /home/medicalbot/backend/medicalbot && \
-               sudo systemctl stop medicalbot.service || true && \
-               git fetch origin && \
-               git reset --hard origin/stage && \
-               echo '📁 Files after git reset:' && \
-               ls -la migrations/ && \
-               go mod tidy && \
-               go build -o medicalbot cmd/main.go && \
-               sudo systemctl start medicalbot.service && \
-               echo '✅ Deployment completed'"
+              -o BatchMode=yes \
+              ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} << 'EOF'
+            echo "🚀 Starting deployment..."
+            cd /home/medicalbot/backend/medicalbot
+          
+            # Останавливаем сервис
+            sudo systemctl stop medicalbot.service || true
+          
+            # Обновляем код
+            git fetch origin
+            git reset --hard origin/stage
+          
+            # Проверяем файлы
+            echo "📁 Current directory:"
+            pwd
+            echo "📁 Files in migrations/:"
+            ls -la migrations/
+            echo "📁 Total .sql files:"
+            find migrations/ -name "*.sql" | wc -l
+          
+            # Собираем приложение
+            go mod tidy
+            go build -o medicalbot cmd/main.go
+          
+            # Запускаем сервис
+            sudo systemctl start medicalbot.service
+          
+            echo "✅ Deployment completed!"
+          EOF
