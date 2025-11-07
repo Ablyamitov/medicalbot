@@ -26,10 +26,10 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          cat <<'EOF' > ~/.ssh/deploy_key
+          cat <<'EOF' > ~/.ssh/github_actions_deploy
           ${{ secrets.VM_SSH_KEY }}
           EOF
-          chmod 600 ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/github_actions_deploy
           ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Test SSH connection
@@ -42,7 +42,7 @@ jobs:
 
       - name: Deploy application
         run: |
-          ssh -i ~/.ssh/deploy_key \
+          ssh -i ~/.ssh/github_actions_deploy \
               -o StrictHostKeyChecking=no \
               ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} << 'EOF'
             set -e
