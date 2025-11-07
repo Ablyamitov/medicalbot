@@ -9,8 +9,6 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/github"
 )
 
-const token = "8219551986:AAGdq7mlmR7mS2r63FccoIqSq0KAkMFVyoM"
-
 func main() {
 	cfg := config.MustLoad()
 
