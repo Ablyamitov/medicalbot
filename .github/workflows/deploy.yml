@@ -7,15 +7,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Check key integrity
-        run: |
-          echo "Lines in key: $(cat ~/.ssh/deploy_key | wc -l)"
-          echo "Key starts with:"
-          head -1 ~/.ssh/deploy_key
-          echo "Key ends with:"
-          tail -1 ~/.ssh/deploy_key
       - name: Checkout code
         uses: actions/checkout@v3
 
@@ -29,54 +22,42 @@ jobs:
           go mod tidy
           go build -o medicalbot cmd/main.go
 
-      - name: Debug SSH setup
+      - name: Save SSH key
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          
-          # Сохраняем ключ
-          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          cat <<'EOF' > ~/.ssh/deploy_key
+          ${{ secrets.VM_SSH_KEY }}
+          EOF
           chmod 600 ~/.ssh/deploy_key
-          
-          # Debug: посмотрим что сохранилось
-          echo "=== Key info ==="
-          ls -la ~/.ssh/deploy_key
-          echo "First 2 lines of key:"
-          head -2 ~/.ssh/deploy_key
-          echo "Last 2 lines of key:"
-          tail -2 ~/.ssh/deploy_key
-          echo "=== End key info ==="
-          
-          # Добавим хост
           ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Test SSH connection with verbose
+      - name: Test SSH connection
         run: |
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
               -o ConnectTimeout=10 \
-              -v \
-              ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} "echo '✅ SSH successful'" || true
+              ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} "echo '✅ SSH connection successful'"
 
       - name: Deploy application
-        if: success()
         run: |
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
               ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} << 'EOF'
+            set -e
             echo "🚀 Starting deployment..."
             cd /home/medicalbot/backend/medicalbot
-          
+
             sudo systemctl stop medicalbot.service || true
-            git fetch origin
+            git fetch origin stage
             git reset --hard origin/stage
-          
+
             echo "📁 Files in migrations:"
-            ls -la migrations/
-          
+            ls -la migrations/ || true
+
             go mod tidy
             go build -o medicalbot cmd/main.go
             sudo systemctl start medicalbot.service
-          
-            echo "✅ Deployment completed!"
+
+            echo "✅ Deployment completed successfully!"
           EOF
