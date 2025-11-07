@@ -22,61 +22,53 @@ jobs:
           go mod tidy
           go build -o medicalbot cmd/main.go
 
-      - name: Setup SSH key properly
+      - name: Debug SSH setup
         run: |
           mkdir -p ~/.ssh
-          # Убедимся что ключ сохраняется правильно
-          cat << 'EOF' > ~/.ssh/deploy_key
-          ${{ secrets.VM_SSH_KEY }}
-          EOF
+          chmod 700 ~/.ssh
+          
+          # Сохраняем ключ
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           
-          # Проверим формат ключа
-          echo "🔍 Checking key format..."
-          file ~/.ssh/deploy_key
+          # Debug: посмотрим что сохранилось
+          echo "=== Key info ==="
+          ls -la ~/.ssh/deploy_key
+          echo "First 2 lines of key:"
           head -2 ~/.ssh/deploy_key
+          echo "Last 2 lines of key:"
+          tail -2 ~/.ssh/deploy_key
+          echo "=== End key info ==="
           
-          # Добавим хост в known_hosts
+          # Добавим хост
           ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
-      - name: Test SSH connection
+      - name: Test SSH connection with verbose
         run: |
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
               -o ConnectTimeout=10 \
-              -o BatchMode=yes \
-              ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} \
-              "echo '✅ SSH connection successful'"
+              -v \
+              ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} "echo '✅ SSH successful'" || true
 
       - name: Deploy application
+        if: success()
         run: |
           ssh -i ~/.ssh/deploy_key \
               -o StrictHostKeyChecking=no \
-              -o BatchMode=yes \
               ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} << 'EOF'
             echo "🚀 Starting deployment..."
             cd /home/medicalbot/backend/medicalbot
           
-            # Останавливаем сервис
             sudo systemctl stop medicalbot.service || true
-          
-            # Обновляем код
             git fetch origin
             git reset --hard origin/stage
           
-            # Проверяем файлы
-            echo "📁 Current directory:"
-            pwd
-            echo "📁 Files in migrations/:"
+            echo "📁 Files in migrations:"
             ls -la migrations/
-            echo "📁 Total .sql files:"
-            find migrations/ -name "*.sql" | wc -l
           
-            # Собираем приложение
             go mod tidy
             go build -o medicalbot cmd/main.go
-          
-            # Запускаем сервис
             sudo systemctl start medicalbot.service
           
             echo "✅ Deployment completed!"
