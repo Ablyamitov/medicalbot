@@ -34,10 +34,11 @@ jobs:
 
       - name: Test SSH connection
         run: |
-          ssh -i ~/.ssh/deploy_key \
-              -o StrictHostKeyChecking=no \
-              -o ConnectTimeout=10 \
-              ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} "echo '✅ SSH connection successful'"
+          ssh -i ~/.ssh/github_actions_deploy \
+            -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} \
+            "echo '✅ SSH connection successful'"
+
 
       - name: Deploy application
         run: |
