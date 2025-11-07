@@ -22,7 +22,17 @@ jobs:
           go mod tidy
           go build -o medicalbot cmd/main.go
 
-      - name: Deploy to VM
+      - name: Copy files to VM
+        uses: appleboy/scp-action@v0.1.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          source: "."
+          target: "/home/medicalbot/backend/medicalbot"
+          strip_components: 1
+
+      - name: Deploy and restart service
         uses: appleboy/ssh-action@v0.1.7
         with:
           host: ${{ secrets.VM_HOST }}
@@ -35,14 +45,13 @@ jobs:
             # Останавливаем сервис
             sudo systemctl stop medicalbot.service || true
             
-            # Принудительно обновляем код (ИСПРАВЛЕНИЕ!)
-            git fetch origin
-            git reset --hard origin/stage
-            
-            # Проверяем что ВСЕ миграции скопировались
-            echo "📁 Checking ALL migrations files..."
-            ls -la migrations/ | wc -l
+            # Проверяем что ВСЕ файлы скопировались
+            echo "📁 Checking ALL files..."
+            ls -la
+            echo "📁 Migrations:"
             ls -la migrations/
+            echo "📁 Total migration files:"
+            ls -la migrations/ | wc -l
             
             # Устанавливаем зависимости
             go mod tidy

@@ -186,7 +186,8 @@ SELECT
     COUNT(a.id) AS answered_questions,
     tr.score,
     tr.interpretation,
-    tr.recommendations
+    tr.recommendations,
+    s.is_consultation_needed
 FROM sessions s
 LEFT JOIN users u ON u.id = s.user_id
 LEFT JOIN answers a ON a.session_id = s.id

@@ -10,6 +10,7 @@ import (
 	"github.com/Ablyamitov/mamedicalbot/internal/operation"
 	"github.com/Ablyamitov/mamedicalbot/internal/usecase"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/google/uuid"
 )
 
 type TelegramBotHandler struct {
@@ -158,8 +159,10 @@ func (h *TelegramBotHandler) handleCallbackQuery(query *tgbotapi.CallbackQuery) 
 		h.continueTest(chatID, userID, testType)
 	case strings.HasPrefix(query.Data, "answer_"):
 		h.handleAnswer(chatID, userID, query.Data)
-	case query.Data == "show_result":
-		h.showTestResult(chatID, userID)
+	case strings.HasPrefix(query.Data, "show_result_"):
+		h.showTestResult(chatID, userID, query.Data)
+	case strings.HasPrefix(query.Data, "consultation_"):
+		h.needConsultation(chatID, userID, query.Data)
 	}
 }
 
@@ -302,7 +305,8 @@ func (h *TelegramBotHandler) handleAnswer(chatID int64, userID, callbackData str
 		if ok, err := h.useCase.CompleteTest(operation.Dereference(user.ID)); !ok || err != nil {
 			h.sendMessage(chatID, "Ошибка завершения теста.")
 		}
-		h.sendCompletionMessage(chatID, userID)
+		session, _ := h.useCase.SessionRepo.GetSessionByUser(operation.Dereference(user.ID))
+		h.sendCompletionMessage(chatID, userID, session.ID)
 	} else {
 		// Показываем следующий вопрос
 		session, _ := h.useCase.SessionRepo.GetSessionByUser(operation.Dereference(user.ID))
@@ -311,13 +315,13 @@ func (h *TelegramBotHandler) handleAnswer(chatID int64, userID, callbackData str
 	}
 }
 
-func (h *TelegramBotHandler) sendCompletionMessage(chatID int64, userID string) {
+func (h *TelegramBotHandler) sendCompletionMessage(chatID int64, userID string, sessionID string) {
 	completionText := "🎉 Поздравляю! Вы ответили на все вопросы.\n\n" +
 		"📊 Сейчас я проанализирую ваши ответы и предоставлю результат..."
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData("📊 Показать результат", "show_result"),
+			tgbotapi.NewInlineKeyboardButtonData("📊 Показать результат", fmt.Sprintf("show_result_%s", sessionID)),
 		),
 	)
 
@@ -326,7 +330,20 @@ func (h *TelegramBotHandler) sendCompletionMessage(chatID int64, userID string) 
 	h.bot.Send(msg)
 }
 
-func (h *TelegramBotHandler) showTestResult(chatID int64, userID string) {
+func (h *TelegramBotHandler) showTestResult(chatID int64, userID string, callbackData string) {
+	parts := strings.Split(callbackData, "_")
+	if len(parts) != 3 {
+		return
+	}
+
+	_, err := uuid.Parse(parts[2])
+	if err != nil {
+		h.sendMessage(chatID, "Ошибка при обработке ответа.")
+		return
+	}
+
+	sessionID := parts[2]
+
 	user, err := h.useCase.GetUserByChatID(userID)
 	if err != nil {
 		h.sendMessage(chatID, "Ошибка при получении результата.")
@@ -355,6 +372,9 @@ func (h *TelegramBotHandler) showTestResult(chatID int64, userID string) {
 		),
 		tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData("🔄 Пройти этот тест еще раз", "test_"+string(result.TestType)),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("✔️ Хочу на консультацию!", "consultation_"+string(sessionID)),
 		),
 	)
 
@@ -408,6 +428,49 @@ func (h *TelegramBotHandler) continueTest(chatID int64, userID string, testType 
 	}
 
 	h.sendQuestion(chatID, question, session.CurrentStep, len(test.Questions))
+}
+
+func (h *TelegramBotHandler) needConsultation(chatID int64, userID string, callbackData string) {
+	parts := strings.Split(callbackData, "_")
+	if len(parts) != 2 {
+		return
+	}
+
+	_, err := uuid.Parse(parts[1])
+	if err != nil {
+		h.sendMessage(chatID, "Ошибка при обработке ответа.")
+		return
+	}
+
+	sessionID := parts[1]
+	session, err := h.useCase.SessionRepo.GetSession(sessionID)
+	if err != nil {
+		h.sendMessage(chatID, "Ошибка при обработке ответа.")
+		return
+	}
+	session.IsConsultationNeeded = true
+	err = h.useCase.SessionRepo.UpdateSession(session)
+	if err != nil {
+		h.sendMessage(chatID, "Ошибка при обработке ответа.")
+		return
+	}
+
+	resultText := "**Заявка на консультацию успешно отправлена!**"
+
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("📋 Пройти другой тест", "show_tests"),
+		),
+		tgbotapi.NewInlineKeyboardRow(
+			tgbotapi.NewInlineKeyboardButtonData("🔄 Пройти этот тест еще раз", "test_"+string(session.TestType)),
+		),
+	)
+
+	msg := tgbotapi.NewMessage(chatID, resultText)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = keyboard
+	h.bot.Send(msg)
+
 }
 
 func (h *TelegramBotHandler) sendMessage(chatID int64, text string) {

@@ -339,33 +339,33 @@ func (uc *MedicalBotUseCase) GetStatisticsExcel() (string, error) {
 
 	// ✨ Заголовок отчета
 	f.SetCellValue(sheet, "A1", "Отчет по результатам тестирования")
-	f.MergeCell(sheet, "A1", "M1")
+	f.MergeCell(sheet, "A1", "N1") // Изменили на N1
 	titleStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Size: 16, Color: "1F4E78"},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"D9EAD3"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 	})
-	f.SetCellStyle(sheet, "A1", "M1", titleStyle)
+	f.SetCellStyle(sheet, "A1", "N1", titleStyle) // Изменили на N1
 
 	// 📈 Сводная информация
 	summaryRow := 3
 	f.SetCellValue(sheet, fmt.Sprintf("A%d", summaryRow),
 		fmt.Sprintf("Всего пользователей: %d | Всего сессий: %d", len(userSessions), len(stats)))
-	f.MergeCell(sheet, fmt.Sprintf("A%d", summaryRow), fmt.Sprintf("M%d", summaryRow))
+	f.MergeCell(sheet, fmt.Sprintf("A%d", summaryRow), fmt.Sprintf("N%d", summaryRow)) // Изменили на N
 
 	summaryStyle, _ := f.NewStyle(&excelize.Style{
 		Font:      &excelize.Font{Bold: true, Size: 11, Color: "1F4E78"},
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"E6F0FF"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
 	})
-	f.SetCellStyle(sheet, fmt.Sprintf("A%d", summaryRow), fmt.Sprintf("M%d", summaryRow), summaryStyle)
+	f.SetCellStyle(sheet, fmt.Sprintf("A%d", summaryRow), fmt.Sprintf("N%d", summaryRow), summaryStyle) // Изменили на N
 
 	// 🗂️ Заголовки таблицы
 	headerRow := 5
 	headers := []string{
 		"ID Сессии", "Chat ID", "Имя", "Фамилия", "Username",
 		"Тип теста", "Статус", "Создан", "Обновлен", "Отвечено",
-		"Баллы", "Интерпретация", "Рекомендации",
+		"Баллы", "Интерпретация", "Рекомендации", "Консультация нужна", // НОВАЯ КОЛОНКА
 	}
 
 	for i, h := range headers {
@@ -378,7 +378,7 @@ func (uc *MedicalBotUseCase) GetStatisticsExcel() (string, error) {
 		Fill:      excelize.Fill{Type: "pattern", Color: []string{"2F75B5"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 	})
-	f.SetCellStyle(sheet, "A5", "M5", headerStyle)
+	f.SetCellStyle(sheet, "A5", "N5", headerStyle) // Изменили на N5
 
 	// 📝 Создаем стили для статусов
 	completedStyle, _ := f.NewStyle(&excelize.Style{
@@ -462,6 +462,12 @@ func (uc *MedicalBotUseCase) GetStatisticsExcel() (string, error) {
 				recommendations = strings.Join(formatted, "\n")
 			}
 
+			// Форматируем значение для консультации
+			consultationText := "❌ Нет"
+			if s.IsConsultationNeeded {
+				consultationText = "✅ Да"
+			}
+
 			values := []interface{}{
 				s.SessionID,
 				s.ChatID,
@@ -469,13 +475,14 @@ func (uc *MedicalBotUseCase) GetStatisticsExcel() (string, error) {
 				s.LastName,
 				s.Username,
 				uc.formatTestType(s.TestType),
-				uc.formatStatus(s.Status), // Статус с эмодзи
+				uc.formatStatus(s.Status),
 				s.CreatedAt.Format("02.01.2006 15:04"),
 				s.UpdatedAt.Format("02.01.2006 15:04"),
 				s.AnsweredQuestions,
 				s.Score,
 				s.Interpretation,
 				recommendations,
+				consultationText,
 			}
 
 			for j, v := range values {
@@ -485,12 +492,12 @@ func (uc *MedicalBotUseCase) GetStatisticsExcel() (string, error) {
 
 			// Применяем стиль в зависимости от статуса
 			if s.Status == "completed" {
-				f.SetCellStyle(sheet, fmt.Sprintf("A%d", currentRow), fmt.Sprintf("M%d", currentRow), completedStyle)
+				f.SetCellStyle(sheet, fmt.Sprintf("A%d", currentRow), fmt.Sprintf("N%d", currentRow), completedStyle) // Изменили на N
 			} else if s.Status == "in_progress" {
-				f.SetCellStyle(sheet, fmt.Sprintf("A%d", currentRow), fmt.Sprintf("M%d", currentRow), inProgressStyle)
+				f.SetCellStyle(sheet, fmt.Sprintf("A%d", currentRow), fmt.Sprintf("N%d", currentRow), inProgressStyle) // Изменили на N
 			} else {
 				// Для других статусов используем базовый стиль пользователя
-				f.SetCellStyle(sheet, fmt.Sprintf("A%d", currentRow), fmt.Sprintf("M%d", currentRow), baseUserStyle)
+				f.SetCellStyle(sheet, fmt.Sprintf("A%d", currentRow), fmt.Sprintf("N%d", currentRow), baseUserStyle) // Изменили на N
 			}
 
 			currentRow++
@@ -505,7 +512,7 @@ func (uc *MedicalBotUseCase) GetStatisticsExcel() (string, error) {
 	// 🔧 Настройки таблицы
 	lastRow := currentRow - 1
 	if lastRow >= dataStartRow {
-		f.AutoFilter(sheet, fmt.Sprintf("A%d:M%d", headerRow, lastRow), []excelize.AutoFilterOptions{})
+		f.AutoFilter(sheet, fmt.Sprintf("A%d:N%d", headerRow, lastRow), []excelize.AutoFilterOptions{}) // Изменили на N
 		f.SetPanes(sheet, &excelize.Panes{
 			Freeze:      true,
 			YSplit:      headerRow,
@@ -542,23 +549,13 @@ func (uc *MedicalBotUseCase) setColumnWidths(f *excelize.File, sheet string) {
 	widths := []float64{
 		36, 15, 15, 15, 15, // A-E
 		20, 12, 16, 16, 12, // F-J
-		10, 25, 40, // K-M
+		10, 25, 40, 15, // K-N
 	}
 
 	for i, width := range widths {
 		col, _ := excelize.ColumnNumberToName(i + 1)
 		f.SetColWidth(sheet, col, col, width)
 	}
-}
-
-func (uc *MedicalBotUseCase) countCompletedSessions(stats []entities.SessionStatistic) int {
-	count := 0
-	for _, s := range stats {
-		if s.Status == "completed" {
-			count++
-		}
-	}
-	return count
 }
 
 func (uc *MedicalBotUseCase) formatTestType(testType string) string {
