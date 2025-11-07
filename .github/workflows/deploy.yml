@@ -22,44 +22,55 @@ jobs:
           go mod tidy
           go build -o medicalbot cmd/main.go
 
-      - name: Copy files to VM
-        uses: appleboy/scp-action@v0.1.3
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          source: "."
-          target: "/home/medicalbot/backend/medicalbot"
-          strip_components: 1
-
-      - name: Deploy and restart service
-        uses: appleboy/ssh-action@v0.1.7
-        with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USERNAME }}
-          key: ${{ secrets.VM_SSH_KEY }}
-          script: |
+      - name: Setup SSH and Deploy
+        run: |
+          # Создаем SSH ключ
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VM_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          # Добавляем хост в known_hosts
+          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts
+          
+          # Тестируем подключение
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} "echo '✅ SSH connection successful'"
+          
+          # Создаем tar архив и копируем
+          tar -czf deploy.tar.gz --exclude='.git' --exclude='.github' .
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no deploy.tar.gz ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }}:/tmp/
+          
+          # Запускаем деплой на VM
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} << 'EOF'
             echo "🚀 Starting deployment..."
             cd /home/medicalbot/backend/medicalbot
-            
+          
             # Останавливаем сервис
             sudo systemctl stop medicalbot.service || true
-            
-            # Проверяем что ВСЕ файлы скопировались
-            echo "📁 Checking ALL files..."
+          
+            # Распаковываем новый код
+            cd /home/medicalbot/backend
+            tar -xzf /tmp/deploy.tar.gz -C medicalbot/ --strip-components=1
+            cd medicalbot
+          
+            # Проверяем файлы
+            echo "📁 Checking files..."
             ls -la
             echo "📁 Migrations:"
             ls -la migrations/
-            echo "📁 Total migration files:"
-            ls -la migrations/ | wc -l
-            
+            echo "📁 Total files:"
+            find . -name "*.go" | wc -l
+          
             # Устанавливаем зависимости
             go mod tidy
-            
+          
             # Собираем приложение
             go build -o medicalbot cmd/main.go
-            
+          
             # Запускаем сервис
             sudo systemctl start medicalbot.service
-            
+          
+            # Очищаем
+            rm /tmp/deploy.tar.gz
+          
             echo "✅ Deployment completed!"
+          EOF
