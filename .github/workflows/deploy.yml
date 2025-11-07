@@ -9,6 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Check key integrity
+        run: |
+          echo "Lines in key: $(cat ~/.ssh/deploy_key | wc -l)"
+          echo "Key starts with:"
+          head -1 ~/.ssh/deploy_key
+          echo "Key ends with:"
+          tail -1 ~/.ssh/deploy_key
       - name: Checkout code
         uses: actions/checkout@v3
 
