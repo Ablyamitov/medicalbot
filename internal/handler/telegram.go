@@ -178,7 +178,7 @@ func (h *TelegramBotHandler) showTestSelection(chatID int64, userID string) {
 	var buttons [][]tgbotapi.InlineKeyboardButton
 
 	for _, test := range tests {
-		text += fmt.Sprintf("🔹 **%s**\n%s\n\n", test.Name, test.Description)
+		text += fmt.Sprintf("🔹 *%s*\n_%s_\n\n", test.Name, test.Description)
 
 		button := tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(
@@ -192,7 +192,7 @@ func (h *TelegramBotHandler) showTestSelection(chatID int64, userID string) {
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(buttons...)
 
 	msg := tgbotapi.NewMessage(chatID, text)
-	msg.ParseMode = "Markdown"
+	msg.ParseMode = "MarkdownV2"
 	msg.ReplyMarkup = keyboard
 	h.bot.Send(msg)
 }
@@ -204,7 +204,7 @@ func (h *TelegramBotHandler) showTestDisclaimer(chatID int64, userID string, tes
 		return
 	}
 
-	text := fmt.Sprintf("📋 **%s**\n\n%s", test.Name, test.Disclaimer)
+	text := fmt.Sprintf("📋 *%s*\n\n%s", test.Name, test.Disclaimer)
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
@@ -229,7 +229,7 @@ func (h *TelegramBotHandler) startTest(chatID int64, userID string, testType ent
 	}
 
 	startText := fmt.Sprintf(
-		"🚀 Начинаем тест: **%s**\n\n"+
+		"🚀 Начинаем тест: *%s*\n\n"+
 			"📊 Всего вопросов: %d\n"+
 			"⏱️ Примерное время прохождения: %d минут",
 		test.Name,
@@ -249,7 +249,7 @@ func (h *TelegramBotHandler) startTest(chatID int64, userID string, testType ent
 
 func (h *TelegramBotHandler) sendQuestion(chatID int64, question *entities.Question, questionNumber, totalQuestions int) {
 	questionText := fmt.Sprintf(
-		"❓ **Вопрос %d из %d:**\n\n%s",
+		"❓ *Вопрос %d из %d:*\n\n%s",
 		questionNumber,
 		totalQuestions,
 		question.Text,
@@ -356,10 +356,10 @@ func (h *TelegramBotHandler) showTestResult(chatID int64, userID string, callbac
 	}
 
 	resultText := fmt.Sprintf(
-		"📊 **Результат теста %s**\n\n"+
-			"🔢 Общий балл: **%d**\n\n"+
-			"📋 **Интерпретация:**\n%s\n\n"+
-			"💡 **Рекомендации:**\n%s",
+		"📊 *Результат теста %s*\n\n"+
+			"🔢 Общий балл: *%d*\n\n"+
+			"📋 *Интерпретация:*\n%s\n\n"+
+			"💡 *Рекомендации:*\n%s",
 		result.TestType,
 		result.Score,
 		result.Interpretation,
@@ -410,7 +410,7 @@ func (h *TelegramBotHandler) continueTest(chatID int64, userID string, testType 
 
 	// Показываем сообщение о продолжении
 	continueText := fmt.Sprintf(
-		"🔄 Продолжаем тест: **%s**\n\n"+
+		"🔄 Продолжаем тест: *%s*\n\n"+
 			"📊 Пройдено вопросов: %d из %d\n"+
 			"⏱️ Вы вернулись к тесту",
 		test.Name,
@@ -455,7 +455,7 @@ func (h *TelegramBotHandler) needConsultation(chatID int64, userID string, callb
 		return
 	}
 
-	resultText := "**Заявка на консультацию успешно отправлена!**"
+	resultText := "*Заявка на консультацию успешно отправлена!*"
 
 	keyboard := tgbotapi.NewInlineKeyboardMarkup(
 		tgbotapi.NewInlineKeyboardRow(
