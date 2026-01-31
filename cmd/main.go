@@ -9,6 +9,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/github"
 )
 
+// main
 func main() {
 	cfg := config.MustLoad()
 
