@@ -47,7 +47,7 @@ jobs:
               ${{ secrets.VM_USERNAME }}@${{ secrets.VM_HOST }} << 'EOF'
             set -e
             echo "🚀 Starting deployment..."
-            cd /home/medicalbot/backend/medicalbot
+            cd /root/backend/medicalbot
 
             sudo systemctl stop medicalbot.service || true
             git fetch origin stage
