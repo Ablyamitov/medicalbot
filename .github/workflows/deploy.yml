@@ -22,6 +22,15 @@ jobs:
           go mod tidy
           go build -o medicalbot cmd/main.go
 
+      - name: Save SSH key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          cat <<'EOF' > ~/.ssh/github_actions_deploy
+          ${{ secrets.VM_SSH_KEY }}
+          EOF
+          chmod 600 ~/.ssh/github_actions_deploy
+          ssh-keyscan -H ${{ secrets.VM_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Test SSH connection
         run: |
